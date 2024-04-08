@@ -1,0 +1,101 @@
+version: "3.9"
+services:
+  postgres14:
+      image: 'postgres:14-alpine'
+      #restart: always
+      container_name: csti-postgres14
+      ports:
+        - 5432:5432
+      environment:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: huancho
+        POSTGRES_DB: msvc_02
+      networks:
+        - csti
+
+  zookeeper:
+      image: confluentinc/cp-zookeeper
+      container_name: csti-kafka-zookeeper
+      environment:
+        ZOOKEEPER_CLIENT_PORT: 2181
+        ZOOKEEPER_TICK_TIME: 2000
+      networks:
+        - csti
+
+  kafka:
+      image: confluentinc/cp-kafka
+      container_name: csti-kafka-broker
+      ports:
+        # To learn about configuring Kafka for access across networks see
+        # https://www.confluent.io/blog/kafka-client-cannot-connect-to-broker-on-aws-on-docker-etc/
+        - "9092:9092"
+      depends_on:
+        - zookeeper
+      environment:
+        KAFKA_BROKER_ID: 1
+        KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+        KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+        KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+        KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      networks:
+        - csti
+  msvc-01:
+    container_name: msvc-01
+    build:
+      context: ./
+      dockerfile: ./msvc-01/Dockerfile
+    ports:
+      - "8081:8081"
+    env_file: ./msvc-01/.env
+    volumes:
+      - ./xml:/xml
+    environment:
+      - REGISTRO_RUTA_ARCHIVO=/xml
+    networks:
+      - csti
+    depends_on:
+      - postgres14
+    restart: always
+  msvc-02:
+    container_name: msvc-02
+    build:
+      context: ./
+      dockerfile: ./msvc-02/Dockerfile
+    ports:
+      - "8082:8082"
+    env_file: ./msvc-02/.env
+    networks:
+      - csti
+    depends_on:
+      - postgres14
+    restart: always
+  msvc-03:
+    container_name: msvc-03
+    build:
+      context: ./
+      dockerfile: ./msvc-03/Dockerfile
+    ports:
+      - "8083:8083"
+    env_file: ./msvc-03/.env
+    networks:
+      - csti
+    depends_on:
+      - postgres14
+    restart: always
+  app:
+    build:
+      context: ./microfront
+      dockerfile: Dockerfile
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./microfront:/usr/src/app
+      - /usr/src/app/node_modules
+    command: ng serve --host 0.0.0.0 --poll 1
+    networks:
+      - csti
+networks:
+  csti:
+    driver: bridge
